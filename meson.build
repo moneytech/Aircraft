@@ -1,23 +1,41 @@
-# project name and programming language
 project('com.github.suzamax.Aircraft', 'vala', 'c', version: '0.1.0')
 
 gnome = import('gnome')
+i18n = import('i18n')
 
-posix_dep = meson.get_compiler('vala').find_library('posix')
+conf = configuration_data()
+conf.set('EXEC_NAME', meson.project_name())
+conf.set_quoted('PROJECT_NAME', meson.project_name())
+conf.set_quoted('GETTEXT_PACKAGE', meson.project_name())
+conf.set_quoted('VERSION', meson.project_version())
+conf.set_quoted('PREFIX', get_option('prefix'))
+configure_file(output: 'config.h', configuration: conf)
+config_h_dir = include_directories('.')
 
-message ('project name and programming language')
+c_args = [
+    '-include', 'config.h',
+    '-w'
+]
 
-# Adds project arguments
-message ('Adds project arguments')
+add_project_arguments(['--vapidir', join_paths(meson.current_source_dir(), 'lib')], language: 'vala')
 
-add_project_arguments([
-        '-DGETTEXT_PACKAGE=\"@0@\"'.format(meson.project_name()),
-        '-L/usr/local/lib',
-        '-ltdjson',
-        '-Wl,-rpath=/usr/local/lib'
-    ],
-    language: 'c',
-)
+
+tdjson_lib = meson.get_compiler('c').find_library('tdjson')
+
+tdjson_vapi = meson.get_compiler('vala').find_library('tdjson', dirs: join_paths(meson.current_source_dir(), 'lib'))
+tdlog_vapi = meson.get_compiler('vala').find_library('tdlog', dirs: join_paths(meson.current_source_dir(), 'lib'))
+
+tdjson_dep = declare_dependency(dependencies: [tdjson_lib, tdjson_vapi])
+tdlog_dep = declare_dependency(dependencies: tdlog_vapi)
+
+# add_project_arguments([
+#         '-DGETTEXT_PACKAGE=\"@0@\"'.format(meson.project_name()),
+#         '-L/usr/local/lib',
+#         '-ltdjson',
+#         '-Wl,-rpath=/usr/local/lib'
+#     ],
+#     language: 'c',
+# )
 
 asresources = gnome.compile_resources(
   'as-resources', 'data/' + meson.project_name() + '.gresource.xml',
@@ -26,35 +44,24 @@ asresources = gnome.compile_resources(
 )
 
 
-# Include the translations module
-message('Include the translations module')
-
-i18n = import('i18n')
-
-# Set our translation domain
-message ('Set our translation domain')
-
 add_global_arguments('-DGETTEXT_PACKAGE=\"@0@\"'.format (meson.project_name()), language:'c')
 
-# Adding deps
-message ('Listing dependencies')
-
-add_project_arguments(['--vapidir', join_paths(meson.current_source_dir(), 'lib')],
-             language: 'vala')
 
 dependencies = [
     dependency('gio-unix-2.0', version: '>=2.20'),
     dependency('granite'),
-    dependency('tdjson'),
-    dependency('tdlog'),
+    # dependency('tdjson'),
+    # dependency('tdlog'),
     dependency('gtk+-3.0'),
     dependency('json-glib-1.0'),
     dependency('glib-2.0'),
-    posix_dep
+    tdjson_dep,
+    tdlog_dep,
+    meson.get_compiler('vala').find_library('posix'),
+    meson.get_compiler('c').find_library('m', required : false),
+    meson.get_compiler('c').find_library('libssl', required : false)
 ]
 
-# Adds subfolders specific build system
-message ('Adds subfolders specific build system')
 
 icon_sizes = ['128', '256']
 
@@ -69,24 +76,10 @@ foreach i : icon_sizes
     )
 endforeach
 
-config_data = configuration_data()
-config_data.set('EXEC_NAME', meson.project_name())
-
-# Src build
-message ('Src build')
-
-conf_data = configuration_data()
-conf_data.set_quoted('PROJECT_NAME', meson.project_name())
-conf_data.set_quoted('GETTEXT_PACKAGE', meson.project_name())
-conf_data.set_quoted('VERSION', meson.project_version())
-conf_data.set_quoted('PREFIX', get_option('prefix'))
-
-message ('Configuring desktop entry: ' + meson.project_name() + '.desktop')
-
 desktop_in_file = configure_file(
     input: join_paths('data', meson.project_name() + '.desktop.in.in'),
     output: '@BASENAME@',
-    configuration: config_data
+    configuration: conf
 )
 
 desktop_file = i18n.merge_file(
@@ -105,8 +98,6 @@ appstream_file = i18n.merge_file(
     install: true,
     install_dir: join_paths(get_option('datadir'), 'metainfo')
 )
-
-message ('Adds files to build')
 
 code_files = files(
     'src/Account.vala',
@@ -127,8 +118,6 @@ code_files = files(
     'src/Views/ChatListView.vala',
     'src/Views/MainWindow.vala'
 )
-
-message ('Defines executable')
 
 executable(
     meson.project_name(),
